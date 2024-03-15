@@ -20,25 +20,9 @@ namespace Pizzeria.Controllers
         {
             return View(db.Users.ToList());
         }
-
-        // GET: Users/Details/5
-        [Authorize(Roles = "Cliente, Amministratore")]
-        public ActionResult Details(int? id)
-        {
-            if (id == null)
-            {
-                return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
-            }
-            Users users = db.Users.Find(id);
-            if (users == null)
-            {
-                return HttpNotFound();
-            }
-            return View(users);
-        }
+       
 
         // GET: Users/Create
-        [Authorize(Roles = "Cliente")]
         public ActionResult Create()
         {
             return View();
@@ -49,18 +33,29 @@ namespace Pizzeria.Controllers
         // Per altri dettagli, vedere https://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Cliente")]
         public ActionResult Create([Bind(Include = "User_ID,Nome,Cognome,Email,Password,Ruolo")] Users users)
         {
+            var userDb = db.Users.Where(u => u.Email == users.Email).FirstOrDefault();
+
             if (ModelState.IsValid)
             {
-                db.Users.Add(users);
-                db.SaveChanges();
-                return RedirectToAction("Index");
+                if (userDb == null)
+                {
+                    db.Users.Add(users);
+                    db.SaveChanges();
+                    TempData["message"] = "Account creato con successo";
+                    return RedirectToAction("Login","Auth");
+                }
+                else
+                {
+                    TempData["mesError"] = "L'email esiste già";
+                    return View(users);
+                }
             }
 
             return View(users);
         }
+
 
         // GET: Users/Edit/5
         [Authorize(Roles = "Cliente, Amministratore")]

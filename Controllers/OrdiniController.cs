@@ -2,11 +2,13 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Entity;
+using System.Drawing;
 using System.Linq;
 using System.Net;
 using System.Web;
 using System.Web.Mvc;
 using System.Web.Security;
+using System.Xml.Linq;
 using Pizzeria.Models;
 
 namespace Pizzeria.Controllers
@@ -20,7 +22,7 @@ namespace Pizzeria.Controllers
 
         public ActionResult Index()
         {
-            var ordini = db.Ordini.Include(o => o.Users);
+            var ordini = db.Ordini.Include(o => o.Users).OrderByDescending(o=>o.Ordine_ID);
             return View(ordini.ToList());
         }
 
@@ -32,39 +34,58 @@ namespace Pizzeria.Controllers
             {
                 return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
             }
-            Ordini ordini = db.Ordini.Find(id);
-            if (ordini == null)
+            var idInt = Convert.ToInt32(id);
+            var order = db.Ordini
+                .Where(o => o.User_ID == idInt)
+                .OrderByDescending(o => o.Ordine_ID).ToList();
+            if (order == null)
             {
                 return HttpNotFound();
             }
-            return View(ordini);
+            return View(order);
         }
 
         // GET: Ordini/Create
         [Authorize(Roles = "Cliente,Amministratore")]
         public ActionResult Create()
         {
-            ViewBag.User_ID = new SelectList(db.Users, "User_ID", "Nome");
+                                
+           ViewBag.Articolo_ID = new SelectList(db.Articoli, "Articolo_ID", "Nome");
+            ViewBag.Ordine_ID = new SelectList(db.Ordini, "Ordine_ID", "Indirizzo");
+
+
             return View();
         }
+
 
         // POST: Ordini/Create
         // Per la protezione da attacchi di overposting, abilitare le proprietà a cui eseguire il binding. 
         // Per altri dettagli, vedere https://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
-        [Authorize(Roles = "Cliente,Amministratore")]
         [ValidateAntiForgeryToken]
-        public ActionResult Create([Bind(Include = "Ordine_ID,Indirizzo,Note,CostoCons,User_ID")] Ordini ordini)
-        {
+        public ActionResult Create(OrdArt ordArt)
+        { 
             if (ModelState.IsValid)
             {
-                db.Ordini.Add(ordini);
+                ordArt.Articoli.Articolo_ID = Convert.ToInt32(ordArt.Articoli.Articolo_ID);
+                // Salva l'ordine nella tabella Ordini
+                db.Ordini.Add(ordArt.Ordini);
                 db.SaveChanges();
-                return RedirectToAction("Index");
+
+                // Ottieni l'Ordine_ID appena creato
+                int newOrdineID = ordArt.Ordini.Ordine_ID;
+
+                // Assegna l'Ordine_ID appena creato al record della tabella OrdArt
+                ordArt.Ordine_ID = newOrdineID;
+
+                // Aggiungi il record della tabella OrdArt
+                db.OrdArt.Add(ordArt);
+                db.SaveChanges();
+
+                return RedirectToAction("Details","OrdArts", new {id = newOrdineID});
             }
 
-            ViewBag.User_ID = new SelectList(db.Users, "User_ID", "Nome", ordini.User_ID);
-            return View(ordini);
+            return View(ordArt);
         }
 
         // GET: Ordini/Edit/5
@@ -91,7 +112,7 @@ namespace Pizzeria.Controllers
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Amministratore")]
 
-        public ActionResult Edit([Bind(Include = "Ordine_ID,Indirizzo,Note,CostoCons,User_ID")] Ordini ordini)
+        public ActionResult Edit([Bind(Include = "Ordine_ID,Indirizzo,Note,Data,Stato,Totale,CostoCons,User_ID")] Ordini ordini)
         {
             if (ModelState.IsValid)
             {
@@ -99,7 +120,6 @@ namespace Pizzeria.Controllers
                 db.SaveChanges();
                 return RedirectToAction("Index");
             }
-            ViewBag.User_ID = new SelectList(db.Users, "User_ID", "Nome", ordini.User_ID);
             return View(ordini);
         }
 
@@ -119,15 +139,26 @@ namespace Pizzeria.Controllers
             return View(ordini);
         }
 
-        // POST: Ordini/Delete/5
         [HttpPost, ActionName("Delete")]
         [Authorize(Roles = "Amministratore")]
         [ValidateAntiForgeryToken]
         public ActionResult DeleteConfirmed(int id)
         {
-            Ordini ordini = db.Ordini.Find(id);
-            db.Ordini.Remove(ordini);
+            Ordini ordine = db.Ordini.Find(id);
+
+            // Trova e rimuovi tutte le voci correlate nella tabella OrdArt
+            var ordArtCorrelati = db.OrdArt.Where(oa => oa.Ordine_ID == id);
+            foreach (var ordArt in ordArtCorrelati)
+            {
+                db.OrdArt.Remove(ordArt);
+            }
+
+            // Rimuovi l'ordine dalla tabella Ordini
+            db.Ordini.Remove(ordine);
+
+            // Salva le modifiche
             db.SaveChanges();
+
             return RedirectToAction("Index");
         }
 
